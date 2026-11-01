@@ -1,132 +1,172 @@
 # RADIANT
+
 ### Reasoning Analysis and Diagnostic Investigation for Advanced Neural-informed Tutoring
 
-**A research initiative by [Noggin Labs](https://github.com/Noggin-Labs)** and [**Folarera Kassim**](https://github.com/FolatheDuckofDuckingburg)
+**A research initiative by [Noggin Labs](https://github.com/Noggin-Labs).**
 
-> Investigating whether large language model tutors can understand, diagnose, and respond to the reasoning behind a student's answer.
+RADIANT is an experimental evaluation framework for investigating whether large language model (LLM) tutors use students' intermediate mathematical reasoning as evidence when diagnosing misconceptions.
 
----
+> **Core question:** When two learners give the same final answer using different reasoning, does an LLM tutor diagnose them differently for the right reasons?
 
-## Overview
+RADIANT is a research evaluation project, not a learner-facing tutor. It does not currently establish that any model improves learning outcomes.
 
-RADIANT is a research project investigating the diagnostic capabilities of large language models (LLMs) in mathematical tutoring.
+## Research aims
 
-A tutoring system should do more than determine whether an answer is correct. It should be able to examine the reasoning that produced that answer, identify misconceptions, distinguish between different reasoning errors, and provide feedback grounded in the learner's actual work.
+- Measure mathematical diagnosis accuracy against human-reviewed reference labels.
+- Test counterfactual diagnostic sensitivity: different reasoning paths with the same final answer should lead to appropriately different diagnoses.
+- Test paraphrase invariance: equivalent reasoning expressed differently should not cause arbitrary diagnosis changes.
+- Measure unsupported diagnoses when only a final answer is available.
+- Assess whether tutor explanations cite actual evidence from the student's work.
 
-However, a correct or incorrect final answer does not necessarily reveal how a student arrived at it.
+## Repository structure
 
-RADIANT investigates this problem through controlled evaluations of LLM tutoring systems, focusing on their ability to interpret intermediate mathematical reasoning rather than relying exclusively on final answers.
+```text
+RADIANT/
+├── .github/workflows/tests.yml
+├── data/
+│   └── pilot_scenarios.jsonl
+├── docs/
+│   ├── research_audit.md
+│   └── scenario_schema_draft.json
+├── src/radiant/
+│   ├── adapters/
+│   │   ├── base.py
+│   │   ├── openai_compatible.py
+│   │   └── scripted.py
+│   ├── analysis.py
+│   ├── cli.py
+│   ├── dataset.py
+│   ├── models.py
+│   ├── prompting.py
+│   ├── runner.py
+│   └── scoring.py
+├── tests/
+├── .env.example
+├── LICENSE
+└── pyproject.toml
+```
 
-## Research question
+## Quick start
 
-**Do LLM tutors genuinely use student reasoning when diagnosing mathematical misconceptions, or do they primarily rely on surface-level answer patterns?**
+Requires Python 3.10 or newer.
 
-### Research objectives
+```bash
+# Create and activate a virtual environment (Windows PowerShell)
+py -m venv .venv
+.venv\\Scripts\\Activate.ps1
 
-- Evaluate the accuracy of mathematical misconception diagnosis.
-- Investigate whether different reasoning paths leading to the same answer produce appropriately different diagnoses.
-- Test whether paraphrasing student reasoning changes diagnostic conclusions unnecessarily.
-- Measure how frequently tutors make unsupported assumptions when insufficient information is available.
-- Evaluate whether accurate diagnoses lead to relevant, mathematically correct, and appropriately scaffolded feedback.
+# Install the package and test dependencies
+python -m pip install -e ".[test]"
 
-## Proposed research questions
+# Validate the example scenarios
+radiant validate data/pilot_scenarios.jsonl
 
-| ID | Research question |
+# Run a pipeline smoke test
+radiant evaluate data/pilot_scenarios.jsonl --adapter scripted --output results/demo
+
+# Run tests
+pytest
+```
+
+The scripted adapter is an oracle-backed test fixture. It reads reference labels to verify that the pipeline works. **Its scores are not model results and must never be reported as experimental findings.**
+
+## Evaluate an actual model
+
+Install the optional API dependency:
+
+```bash
+python -m pip install -e ".[api]"
+```
+
+Set environment variables (do not commit API keys):
+
+```bash
+# PowerShell example
+$env:RADIANT_API_BASE = "https://api.openai.com/v1"
+$env:RADIANT_API_KEY = "YOUR_KEY"
+$env:RADIANT_MODEL = "YOUR_MODEL_ID"
+```
+
+Then use the adapter in Python:
+
+```python
+from radiant.adapters.openai_compatible import OpenAICompatibleAdapter
+from radiant.runner import run_evaluation
+
+adapter = OpenAICompatibleAdapter()
+report = run_evaluation(
+    "data/pilot_scenarios.jsonl",
+    adapter,
+    "results/model_run",
+)
+print(report["metrics"])
+```
+
+The adapter sends the problem, final answer, and student working to the model. It does **not** send reference diagnoses or gold evidence labels.
+
+## Scenario format
+
+Each line in the dataset is a JSON object. Core fields:
+
+| Field | Meaning |
 |---|---|
-| RQ1 | Do tutors respond appropriately to changes in intermediate reasoning when the final answer remains constant? |
-| RQ2 | Can tutors identify and reference the specific steps supporting their diagnoses? |
-| RQ3 | Are diagnoses stable when mathematically equivalent reasoning is paraphrased? |
-| RQ4 | Do tutors recognise when the available evidence is insufficient? |
-| RQ5 | Does diagnostic accuracy translate into better-targeted instructional feedback? |
+| `scenario_id` | Unique scenario identifier |
+| `condition` | Experimental condition name |
+| `problem` | Mathematical task |
+| `final_answer` | Learner's submitted answer, if available |
+| `student_work` | Learner's intermediate reasoning, if available |
+| `reference_diagnosis` | Human-reviewed label; null when diagnosis is not justified |
+| `evidence_steps` | Reference evidence snippets |
+| `expected_action` | `diagnose`, `ask_clarification`, or `abstain` |
+| `pair_id` | Optional matched-pair identifier |
 
-## Methodology
+Reference labels must be prepared independently and hidden from the model adapter. The included cases are synthetic software fixtures, not a validated educational assessment dataset.
 
-The initial investigation will use controlled mathematical scenarios, beginning with algebra.
+## Metrics
 
-Proposed experimental conditions include:
+The first implementation reports:
 
-1. **Answer-only:** The tutor receives the problem and final answer.
-2. **Worked reasoning:** The tutor receives the student's intermediate steps.
-3. **Paraphrased reasoning:** The tutor receives equivalent reasoning expressed differently.
-4. **Underdetermined evidence:** The tutor receives insufficient information to establish a reliable diagnosis.
+- **Diagnosis accuracy:** exact normalized match to the reference label on diagnosis-eligible cases.
+- **Action accuracy:** whether the model chose the expected action.
+- **Evidence-grounding rate:** whether cited evidence snippets occur verbatim in the supplied student work.
+- **Unsupported-diagnosis rate:** frequency of diagnosing scenarios whose reference action is clarification or abstention.
+- **Counterfactual sensitivity:** whether paired scenarios with distinct reference diagnoses receive distinct model diagnoses.
+- **Paraphrase invariance:** whether paired paraphrases with the same reference diagnosis receive the same model diagnosis.
 
-Matched scenarios will help isolate the influence of intermediate reasoning on diagnostic behaviour.
+These are deliberately simple initial metrics. Exact-match labels can penalize semantically equivalent diagnoses; evidence quotation is not proof that the model reasoned correctly; pair-level rates are only meaningful for carefully constructed, reviewed pairs. Human annotation and calibration are required before substantive claims.
 
-### Evaluation metrics
+## Experimental safeguards
 
-| Metric | What it measures |
-|---|---|
-| Diagnosis accuracy | Whether the identified misconception is correct |
-| Diagnostic sensitivity | Whether diagnoses respond appropriately to changed reasoning |
-| Paraphrase invariance | Whether equivalent reasoning preserves the diagnosis |
-| Unsupported-diagnosis rate | How often tutors assert diagnoses without sufficient evidence |
-| Evidence grounding | Whether diagnoses reference relevant mathematical steps |
-| Feedback quality | Whether instructional feedback is correct and appropriately targeted |
+1. Freeze scenario definitions and scoring rules before the main evaluation.
+2. Have mathematical scenarios and reference labels independently reviewed.
+3. Keep gold labels out of model prompts and logs sent to the model.
+4. Record model ID, provider, prompt version, temperature, date, and dataset hash for each run.
+5. Separate diagnosis quality from feedback quality and actual learner outcomes.
+6. Report failures, abstentions, missing outputs, and uncertainty rather than silently dropping them.
+7. Do not treat synthetic learner scenarios as evidence of real-world learning gains.
 
-Mathematical correctness, diagnostic accuracy, and instructional quality will be evaluated separately.
+## Relationship to Noggimigo
 
-## Research foundations
+RADIANT is a research initiative within Noggin Labs. Noggimigo is a separate tutoring-engine project. RADIANT's findings may inform Noggimigo only after independent evaluation and review; this repository does not depend on Noggimigo internals.
 
-RADIANT builds upon existing research in AI tutoring and mathematical reasoning evaluation.
+## Research status
 
-Relevant work includes:
+**Early prototype — protocol and evaluation infrastructure under development.** The example dataset is a software fixture. It has not been independently validated, and no model comparison or learning-outcome claim is made by this repository.
 
-- [Unifying AI Tutor Evaluation — MRBench (NAACL 2025)](https://aclanthology.org/2025.naacl-long.57/)
-- [Stepwise Verification and Remediation of Student Reasoning Errors (EMNLP 2024)](https://aclanthology.org/2024.emnlp-main.478/)
-- [MisconceptDialogue (2026)](https://arxiv.org/abs/2610.31679)
-- [MathDial](https://github.com/eth-nlped/mathdial)
+See [`docs/research_audit.md`](docs/research_audit.md) for the current literature-overlap review and proposed research design.
 
-These studies provide important foundations for evaluating tutoring quality, reasoning-error identification, and misconception diagnosis.
+## License
 
-RADIANT aims to investigate a complementary question: how reliably do tutors use changes in the learner's actual reasoning as diagnostic evidence?
+MIT. See [LICENSE](LICENSE).
 
-This is a research hypothesis, not an established novelty claim.
+## Run an API-backed evaluation from the CLI
 
-## Relationship with Noggimigo
+After setting the environment variables above:
 
-RADIANT is a research initiative within **Noggin Labs**.
+```bash
+radiant evaluate data/pilot_scenarios.jsonl --adapter openai-compatible --output results/model_run
+```
 
-Its findings may inform the development of [Noggimigo](https://github.com/Noggin-Labs/noggimigo), an open-source tutoring system focused on structured, adaptive learning.
+Each run writes `report.json` and `records.csv`. The JSON report includes the dataset SHA-256, prompt SHA-256, software/Python versions, UTC timestamp, adapter/model identifier, failure count, aggregate metrics, paired diagnostics, and per-scenario records. Store the exact code revision and provider settings with any research release.
 
-The projects have distinct responsibilities:
-
-- **RADIANT:** Researches and evaluates diagnostic behaviour in LLM tutors.
-- **Noggimigo:** Develops tutoring infrastructure and learner-facing educational functionality.
-
-Research findings will only be incorporated into Noggimigo when supported by appropriate evidence and testing.
-
-## Current status
-
-**Research stage: Protocol development and literature review.**
-
-| Component | Status |
-|---|---|
-| Initial research question | Defined |
-| Literature review | Underway |
-| Research objectives | Drafted |
-| Evaluation methodology | Proposed |
-| Scenario dataset | Not yet validated |
-| Pilot evaluation | Not yet conducted |
-| Experimental results | Not yet available |
-
-No claims of demonstrated learning improvement or diagnostic superiority are currently made.
-
-## Research principles
-
-RADIANT follows several principles:
-
-- **Evidence over assumptions:** A tutor should not invent a misconception from insufficient information.
-- **Mathematical correctness:** Diagnoses and explanations must be mathematically defensible.
-- **Reproducibility:** Evaluation conditions and scoring criteria should be documented.
-- **Separation of outcomes:** Correct diagnosis does not automatically imply effective teaching.
-- **Scientific caution:** Hypotheses must remain distinct from experimental findings.
-
-## Organisation
-
-**Noggin Labs**
-
-RADIANT is an independent research initiative within Noggin Labs, focused on the evaluation of reasoning-aware AI tutoring.
-
----
-
-*RADIANT — Understanding the reasoning behind the answer.*
+Metric definitions and caveats are documented in [`docs/METRICS.md`](docs/METRICS.md).
