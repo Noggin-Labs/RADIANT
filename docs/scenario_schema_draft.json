@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://noggin-labs.example/radiant/scenario.schema.json",
+  "title": "RADIANT tutoring evaluation scenario",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "scenario_id",
+    "pair_id",
+    "condition_type",
+    "domain",
+    "problem",
+    "learner_final_answer",
+    "learner_work",
+    "reference_status",
+    "reference_diagnosis",
+    "evidence_steps",
+    "acceptable_feedback_features",
+    "validation"
+  ],
+  "properties": {
+    "scenario_id": {"type": "string", "minLength": 1},
+    "pair_id": {"type": "string", "minLength": 1},
+    "condition_type": {
+      "type": "string",
+      "enum": ["worked_reasoning", "paraphrased_reasoning", "answer_only", "ambiguous"]
+    },
+    "domain": {"type": "string", "const": "middle_school_algebra"},
+    "problem": {"type": "string", "minLength": 1},
+    "learner_final_answer": {"type": "string", "minLength": 1},
+    "learner_work": {"type": ["string", "null"]},
+    "reference_status": {
+      "type": "string",
+      "enum": ["correct", "incorrect", "underdetermined"]
+    },
+    "reference_diagnosis": {
+      "type": ["string", "null"],
+      "description": "Null when the available evidence does not support a unique diagnosis."
+    },
+    "alternative_diagnoses": {
+      "type": "array",
+      "items": {"type": "string"},
+      "default": []
+    },
+    "evidence_steps": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "acceptable_feedback_features": {
+      "type": "array",
+      "items": {"type": "string"},
+      "minItems": 1
+    },
+    "must_ask_clarification": {"type": "boolean", "default": false},
+    "pair_relation": {
+      "type": ["string", "null"],
+      "enum": ["different_reasoning_same_answer", "same_reasoning_paraphrase", "answer_only_ablation", null]
+    },
+    "source_attribution": {
+      "type": ["object", "null"],
+      "description": "Required if adapting any third-party source material. Include dataset, record identifier, license, and modifications."
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["symbolic_or_manual_check", "review_status"],
+      "properties": {
+        "symbolic_or_manual_check": {"type": "string", "minLength": 1},
+        "review_status": {
+          "type": "string",
+          "enum": ["draft", "self_checked", "independently_reviewed", "rejected"]
+        },
+        "reviewer_role": {"type": ["string", "null"]}
+      }
+    }
+  }
+}
