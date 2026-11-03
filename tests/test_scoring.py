@@ -27,4 +27,9 @@ def test_unsupported_diagnosis_flagged():
 def test_metrics_do_not_report_empty_diagnosis_accuracy_as_zero():
     scenario = Scenario("s3", "under", "x+1=2", "1", None, None, expected_action="abstain")
     record = score_response(scenario, TutorResponse(None, "abstain"))
-    assert aggregate_metrics([record])["diagnosis_accuracy"] is None
+    # Rates are now dicts so every rate carries its own denominator.
+    metrics = aggregate_metrics([record])[
+        "diagnosis_accuracy"
+    ]
+    assert metrics["rate"] is None
+    assert metrics["denominator"] == 0
