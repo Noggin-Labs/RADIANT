@@ -14,9 +14,9 @@ from radiant.prompting import SYSTEM_PROMPT
 
 from .analysis import paired_diagnostics
 from .adapters.base import TutorAdapter
-from .models import EvaluationRecord
+from .models import EvaluationRecord, TutorResponse
 from .scoring import aggregate_metrics, score_response
-from .dataset import load_jsonl
+from .dataset import load_jsonl, validate_pairs
 
 
 def run_evaluation(dataset_path: str | Path, adapter: TutorAdapter, output_dir: str | Path) -> dict:
@@ -30,18 +30,27 @@ def run_evaluation(dataset_path: str | Path, adapter: TutorAdapter, output_dir: 
             response = adapter.respond(scenario)
             records.append(score_response(scenario, response))
         except Exception as exc:  # preserve failures as explicit records
-            from .models import TutorResponse
+            # A failed call is missing data, not a wrong answer. Its
+            # diagnosis_correct is left None so it cannot inflate or deflate
+            # accuracy; it is counted in the failure rate and kept in the report.
             records.append(EvaluationRecord(
                 scenario_id=scenario.scenario_id,
                 condition=scenario.condition,
                 pair_id=scenario.pair_id,
                 reference_diagnosis=scenario.reference_diagnosis,
-                response=TutorResponse(diagnosis=None, action="error", explanation="Adapter failure"),
-                diagnosis_correct=False if scenario.expected_action == "diagnose" else None,
+                response=TutorResponse(
+                    diagnosis=None, action="error",
+                    explanation="Adapter failure; no response produced.",
+                ),
+                diagnosis_correct=None,
                 action_correct=False,
                 evidence_grounded=None,
                 unsupported_diagnosis=False,
                 error=f"{type(exc).__name__}: {exc}",
+                expected_action=scenario.expected_action,
+                problem=scenario.problem,
+                final_answer=scenario.final_answer,
+                student_work=scenario.student_work,
             ))
 
     record_dicts = [record.to_dict() for record in records]
@@ -58,6 +67,8 @@ def run_evaluation(dataset_path: str | Path, adapter: TutorAdapter, output_dir: 
         "dataset_sha256": hashlib.sha256(dataset_bytes).hexdigest(),
         "n_failures": sum(record.error is not None for record in records),
         "dataset": str(dataset_path),
+        "inference_parameters": getattr(adapter, "inference_parameters", None),
+        "pair_validation": validate_pairs(scenarios),
         "metrics": metrics,
         "paired_diagnostics": paired_diagnostics(records),
         "records": record_dicts,

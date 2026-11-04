@@ -84,6 +84,12 @@ class EvaluationRecord:
     evidence_grounded: bool | None
     unsupported_diagnosis: bool
     error: str | None = None
+    # Carried on the record so that aggregation and pair validation do not need
+    # the source Scenario objects, and so reports stay self-describing.
+    expected_action: str = "diagnose"
+    problem: str | None = None
+    final_answer: str | None = None
+    student_work: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -97,4 +103,8 @@ class EvaluationRecord:
             "evidence_grounded": self.evidence_grounded,
             "unsupported_diagnosis": self.unsupported_diagnosis,
             "error": self.error,
+            "expected_action": self.expected_action,
+            "problem": self.problem,
+            "final_answer": self.final_answer,
+            "student_work": self.student_work,
         }
