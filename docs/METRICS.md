@@ -16,7 +16,9 @@ Every evidence quote must occur as a case-insensitive substring of the supplied 
 
 ## Unsupported-diagnosis rate
 
-The numerator is the number of scenarios where the reference action is clarification/abstention but the tutor chooses `diagnose`. The denominator is all evaluated scenarios in the current implementation. For a final paper, report this rate separately on a pre-defined insufficient-evidence subset as well.
+The primary unsupported-diagnosis rate is calculated only on the pre-defined insufficient-evidence subset: scenarios whose reference action is `ask_clarification` or `abstain`. Its numerator is the number of those scenarios where the tutor chooses `diagnose`; its denominator is the number of scored scenarios in that subset.
+
+The implementation also retains `unsupported_diagnosis_rate_pooled_legacy`, whose denominator is all scored scenarios, for continuity with earlier reports. These two rates answer different questions and must not be conflated. Always report the numerator and denominator, not just the proportion. Failed adapter calls are excluded from scored denominators and reported separately.
 
 ## Counterfactual sensitivity
 
